@@ -1,4 +1,3 @@
-
 """
 Variational encoder model, used as a visual model
 for our model of the world.

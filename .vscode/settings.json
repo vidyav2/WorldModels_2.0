@@ -1,5 +1,9 @@
 {
-    "python.analysis.autoImportCompletions": false,
+    "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "off",
     "cmake.ignoreCMakeListsMissing": true
 }
+
+    
+
+  

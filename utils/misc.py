@@ -10,6 +10,7 @@ import gym.envs.box2d
 
 import cv2
 
+
 # A bit dirty: manually change size of car racing env
 gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 96, 96
 
