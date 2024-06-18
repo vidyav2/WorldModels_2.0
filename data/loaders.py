@@ -90,7 +90,7 @@ class RolloutSequenceDataset(_RolloutDataset):
         reward, terminal = [data[key][seq_index + 1:seq_index + self._seq_len + 1].astype(np.float32) for key in ('rewards', 'terminals')]
 
         # Debugging: Print shapes of loaded data
-        print(f"Loaded data shapes - obs: {obs.shape}, action: {action.shape}, reward: {reward.shape}, terminal: {terminal.shape}, next_obs: {next_obs.shape}")
+        #print(f"Loaded data shapes - obs: {obs.shape}, action: {action.shape}, reward: {reward.shape}, terminal: {terminal.shape}, next_obs: {next_obs.shape}")
 
         return obs, action, reward, terminal, next_obs
 
