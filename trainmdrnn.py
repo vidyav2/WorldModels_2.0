@@ -1,4 +1,3 @@
-""" Memory model training """
 import argparse
 from functools import partial
 from os.path import join, exists
@@ -25,10 +24,9 @@ args = parser.parse_args()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Constants
-BSIZE = 36
+BSIZE = 16
 SEQ_LEN = 32
-epochs = 100
-LSIZE = 32
+epochs = 30
 
 # Loading VAE
 vae_file = join(args.logdir, 'vaeNew', 'best.tar')
@@ -66,46 +64,83 @@ test_loader = DataLoader(RolloutSequenceDataset(['datasets/carracing'], SEQ_LEN,
                          batch_size=BSIZE, num_workers=8, drop_last=True)
 
 def to_latent(obs, next_obs):
+    """ Transform observations to latent space.
+
+    :args obs: 5D torch tensor (BSIZE, SEQ_LEN, 3, SIZE, SIZE)
+    :args next_obs: 5D torch tensor (BSIZE, SEQ_LEN, 3, SIZE, SIZE)
+
+    :returns: (latent_obs, latent_next_obs)
+        - latent_obs: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
+        - next_latent_obs: 4D torch tensor (BSIZE, SEQ_LEN, LSIZE)
+    """
     with torch.no_grad():
-        obs, next_obs = [F.interpolate(x.view(-1, 3, SIZE, SIZE), size=RED_SIZE, mode='bilinear', align_corners=True)
-                         for x in (obs, next_obs)]
-        (obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma) = [vae(x)[1:] for x in (obs, next_obs)]
-
-        total_elements = obs_mu.nelement()  # Total elements in the tensor
-        calculated_bsize = total_elements // (SEQ_LEN * LSIZE)  # Calculate BSIZE dynamically
-
-        try:
-            latent_obs, latent_next_obs = [
-                (x_mu + x_logsigma.exp() * torch.randn_like(x_mu)).view(calculated_bsize, SEQ_LEN, LSIZE)
-                for x_mu, x_logsigma in [(obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma)]
-            ]
-        except RuntimeError as e:
-            print(f"Reshape error with calculated BSIZE: {calculated_bsize}")
-            raise e
+        obs, next_obs = [
+            F.interpolate(x.view(-1, 3, SIZE, SIZE), size=RED_SIZE, mode='bilinear', align_corners=True)
+            for x in (obs, next_obs)]
         
+        print(f"After interpolation - obs: {obs.shape}, next_obs: {next_obs.shape}")
+        
+        (obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma) = [
+            vae(x)[1:] for x in (obs, next_obs)]
+        
+        print(f"After VAE encoding - obs_mu: {obs_mu.shape}, obs_logsigma: {obs_logsigma.shape}, next_obs_mu: {next_obs_mu.shape}, next_obs_logsigma: {next_obs_logsigma.shape}")
+        
+        latent_obs, latent_next_obs = [
+            (x_mu + x_logsigma.exp() * torch.randn_like(x_mu))
+            for x_mu, x_logsigma in
+            [(obs_mu, obs_logsigma), (next_obs_mu, next_obs_logsigma)]]
+
+        # Print the shape of the tensor before reshaping
+        print(f"Before reshaping - latent_obs: {latent_obs.shape}, latent_next_obs: {latent_next_obs.shape}")
+        
+        # Reshape the tensors to match (BSIZE, SEQ_LEN, LSIZE)
+        latent_obs = latent_obs.view(BSIZE, SEQ_LEN, LSIZE)
+        latent_next_obs = latent_next_obs.view(BSIZE, SEQ_LEN, LSIZE)
+        
+        print(f"After reshaping - latent_obs: {latent_obs.shape}, latent_next_obs: {latent_next_obs.shape}")
+
     return latent_obs, latent_next_obs
 
 def get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward: bool):
-    if action.size(0) == 0:
-        raise ValueError("Action tensor is empty. Check data loading and batching.")
+    """ Compute losses.
 
+    The loss that is computed is:
+    (GMMLoss(latent_next_obs, GMMPredicted) + MSE(reward, predicted_reward) +
+         BCE(terminal, logit_terminal)) / (LSIZE + 2)
+    The LSIZE + 2 factor is here to counteract the fact that the GMMLoss scales
+    approximately linearily with LSIZE. All losses are averaged both on the
+    batch and the sequence dimensions (the two first dimensions).
+
+    :args latent_obs: (BSIZE, SEQ_LEN, LSIZE) torch tensor
+    :args action: (BSIZE, SEQ_LEN, ASIZE) torch tensor
+    :args reward: (BSIZE, SEQ_LEN) torch tensor
+    :args terminal: (BSIZE, SEQ_LEN) torch tensor
+    :args latent_next_obs: (BSIZE, SEQ_LEN, LSIZE) torch tensor
+
+    :returns: dictionary of losses, containing the gmm, the mse, the bce and
+        the averaged loss.
+    """
     latent_obs, action, reward, terminal, latent_next_obs = [
         arr.transpose(1, 0) for arr in [latent_obs, action, reward, terminal, latent_next_obs]
     ]
-    action = action.repeat(1, latent_obs.size(1) // action.size(1), 1)
 
-    # Print shapes for debugging
-    print(f"latent_obs shape before mdrnn: {latent_obs.shape}, action shape before mdrnn: {action.shape}")
+    # Ensure actions and latents have the correct dimensions
+    latent_obs = latent_obs.reshape(BSIZE, SEQ_LEN, LSIZE)
+    latent_next_obs = latent_next_obs.reshape(BSIZE, SEQ_LEN, LSIZE)
 
-    mus, sigmas, logpi, rs, ds = mdrnn(action, latent_obs)
+    # Concatenate action and latent_obs along the last dimension
+    inputs = torch.cat([action, latent_obs], dim=-1)
+    
+    mus, sigmas, logpi, rs, ds = mdrnn(inputs)
+    
     gmm = gmm_loss(latent_next_obs, mus, sigmas, logpi)
     bce = F.binary_cross_entropy_with_logits(ds, terminal)
     mse = F.mse_loss(rs, reward) if include_reward else 0
     loss = (gmm + bce + mse) / (LSIZE + 2 if include_reward else LSIZE + 1)
     return dict(gmm=gmm, bce=bce, mse=mse, loss=loss)
 
-
-def data_pass(epoch, train, include_reward):  # pylint: disable=too-many-locals
+def data_pass(epoch, train, include_reward):
+    """ One pass through the data """
     if train:
         mdrnn.train()
         loader = train_loader
@@ -114,31 +149,21 @@ def data_pass(epoch, train, include_reward):  # pylint: disable=too-many-locals
         loader = test_loader
 
     loader.dataset.load_next_buffer()
-    cum_loss = cum_gmm = cum_bce = cum_mse = 0
+
+    cum_loss = 0
+    cum_gmm = 0
+    cum_bce = 0
+    cum_mse = 0
 
     pbar = tqdm(total=len(loader.dataset), desc=f"Epoch {epoch}")
     for i, data in enumerate(loader):
         obs, action, reward, terminal, next_obs = [arr.to(device) for arr in data]
+
+        # Debugging print statements for loaded data shapes
+        print(f"Loaded data shapes - obs: {obs.shape}, action: {action.shape}, reward: {reward.shape}, terminal: {terminal.shape}, next_obs: {next_obs.shape}")
+
+        # Transform obs
         latent_obs, latent_next_obs = to_latent(obs, next_obs)
-
-        # Check and handle empty action tensor
-        if action.size(0) == 0:
-            raise ValueError("Action tensor is empty. Check data loading and batching.")
-
-        # Ensure consistent batch sizes
-        if latent_obs.size(0) != action.size(0):
-            print(f"Batch size mismatch: latent_obs size = {latent_obs.size(0)}, action size = {action.size(0)}")
-            raise ValueError("Mismatch in sizes between latent observations and actions.")
-
-        action = action.transpose(1, 0)
-        if latent_obs.size(1) % action.size(1) != 0:
-            print(f"Action size mismatch: latent_obs size = {latent_obs.size(1)}, action size = {action.size(1)}")
-            raise ValueError("Mismatch in sizes between latent observations and actions.")
-
-        action = action.repeat(1, latent_obs.size(1) // action.size(1), 1)
-
-        # Print shapes for debugging
-        print(f"latent_obs shape: {latent_obs.shape}, action shape: {action.shape}")
 
         if train:
             losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward)
@@ -152,14 +177,17 @@ def data_pass(epoch, train, include_reward):  # pylint: disable=too-many-locals
         cum_loss += losses['loss'].item()
         cum_gmm += losses['gmm'].item()
         cum_bce += losses['bce'].item()
-        cum_mse += losses['mse'].item() if hasattr(losses['mse'], 'item') else losses['mse']
+        cum_mse += losses['mse'].item() if include_reward else 0
 
-        pbar.set_postfix_str(f"loss={cum_loss / (i + 1):.6f} bce={cum_bce / (i + 1):.6f} "
-                             f"gmm={cum_gmm / LSIZE / (i + 1):.6f} mse={cum_mse / (i + 1):.6f}")
+        if i % 100 == 0 and i > 0:
+            print(f"{'Train' if train else 'Test'} Epoch {epoch} | "
+                  f"Loss {cum_loss / (i + 1):.6f} "
+                  f"gmm={cum_gmm / (i + 1):.6f} "
+                  f"bce={cum_bce / (i + 1):.6f} "
+                  f"mse={cum_mse / (i + 1):.6f} ({len(loader.dataset)})")
         pbar.update(BSIZE)
     pbar.close()
     return cum_loss * BSIZE / len(loader.dataset)
-
 
 train = partial(data_pass, train=True, include_reward=args.include_reward)
 test = partial(data_pass, train=False, include_reward=args.include_reward)

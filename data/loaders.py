@@ -11,7 +11,6 @@ class _RolloutDataset(torch.utils.data.Dataset):
         self._transform = transform
         self._files = []
 
-        # Ensure roots is a list of directories
         if isinstance(roots, str):
             roots = [roots]
 
@@ -42,7 +41,6 @@ class _RolloutDataset(torch.utils.data.Dataset):
         self._buffer_size = buffer_size
 
     def load_next_buffer(self):
-        """ Loads next buffer """
         if len(self._files) == 0:
             raise ValueError("No data files found.")
 
@@ -52,9 +50,7 @@ class _RolloutDataset(torch.utils.data.Dataset):
         self._buffer = []
         self._cum_size = [0]
 
-        # progress bar
-        pbar = tqdm(total=len(self._buffer_fnames),
-                    bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}')
+        pbar = tqdm(total=len(self._buffer_fnames), bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}')
         pbar.set_description("Loading file buffer ...")
 
         for f in self._buffer_fnames:
@@ -101,28 +97,7 @@ class RolloutSequenceDataset(_RolloutDataset):
     def _data_per_sequence(self, data_length):
         return data_length - self._seq_len
 
-class RolloutObservationDataset(_RolloutDataset): # pylint: disable=too-few-public-methods
-    """ Encapsulates rollouts.
-
-    Rollouts should be stored in subdirs of the root directory, in the form of npz files,
-    each containing a dictionary with the keys:
-        - observations: (rollout_len, *obs_shape)
-        - actions: (rollout_len, action_size)
-        - rewards: (rollout_len,)
-        - terminals: (rollout_len,), boolean
-
-     As the dataset is too big to be entirely stored in rams, only chunks of it
-     are stored, consisting of a constant number of files (determined by the
-     buffer_size parameter).  Once built, buffers must be loaded with the
-     load_next_buffer method.
-
-    Data are then provided in the form of images
-
-    :args root: root directory of data sequences
-    :args seq_len: number of timesteps extracted from each rollout
-    :args transform: transformation of the observations
-    :args train: if True, train data, else test
-    """
+class RolloutObservationDataset(_RolloutDataset):
     def _data_per_sequence(self, data_length):
         return data_length
 

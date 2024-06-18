@@ -7,4 +7,3 @@ frames/
 dock_config.json
 .mypy_cache
 datasets/
-exp_dir/
