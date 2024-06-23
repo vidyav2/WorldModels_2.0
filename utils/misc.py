@@ -110,7 +110,7 @@ class RolloutGenerator(object):
         """ Build vae, rnn, controller and environment. """
         # Loading world model and vae
         vae_file, rnn_file, ctrl_file = \
-            [join(mdir, m, 'best.tar') for m in ['vae', 'mdrnn', 'ctrl']]
+            [join(mdir, m, 'best.tar') for m in ['vaeNew', 'mdrnn', 'ctrl']]
 
         assert exists(vae_file) and exists(rnn_file),\
             "Either vae or mdrnn is untrained."
@@ -148,7 +148,8 @@ class RolloutGenerator(object):
         # load controller if it was previously saved
         if exists(ctrl_file):
             ctrl_state = torch.load(ctrl_file, map_location={'cuda:0': str(device)})
-            print("Loading Controller...")
+            print("Loading Controller with reward {}".format(
+                ctrl_state['reward']))
             self.controller.load_state_dict(ctrl_state['state_dict'])
 
         self.env = gym.make('CarRacing-v2')
@@ -156,14 +157,14 @@ class RolloutGenerator(object):
 
         self.time_limit = time_limit
 
-        # create video writer from cv2
+    ###    # create video writer from cv2
         self.writer = cv2.VideoWriter('output.avi', 
                          cv2.VideoWriter_fourcc(*'MJPG'),
                          50, (128, 128))
         
         self.dream_writer = cv2.VideoWriter('dream_output.avi',
                             cv2.VideoWriter_fourcc(*'MJPG'),
-                            50, (64, 64))
+                            50, (64, 64))  ### 
 
     def get_action_and_transition(self, obs, hidden):
         """ Get action and transition.
@@ -220,8 +221,8 @@ class RolloutGenerator(object):
         cumulative = 0
         i = 0
         while True:
-            print(f"Rendering frame {i}      ",end='\r')
-            self.writer.write(cv2.cvtColor(obs, cv2.COLOR_RGB2BGR))
+            print(f"Rendering frame {i}      ",end='\r') ##
+            self.writer.write(cv2.cvtColor(obs, cv2.COLOR_RGB2BGR)) ##
             obs = transform(obs[:84, :, :]).unsqueeze(0).to(self.device)
             action, hidden = self.get_action_and_transition(obs, hidden)
             obs, reward, done, _, _ = self.env.step(action)

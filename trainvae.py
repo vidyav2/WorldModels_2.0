@@ -138,7 +138,7 @@ if not args.noreload and exists(reload_file):
     optimizer.load_state_dict(state['optimizer'])
     scheduler.load_state_dict(state['scheduler'])
     # Skip loading early stopping state
-    #earlystopping.load_state_dict(state['earlystopping'])
+    earlystopping.load_state_dict(state['earlystopping'])
 
 cur_best = None
 
@@ -160,7 +160,7 @@ for epoch in range(1, args.epochs + 1):
         'precision': test_loss,
         'optimizer': optimizer.state_dict(),
         'scheduler': scheduler.state_dict(),
-        #'earlystopping': earlystopping.state_dict()
+        'earlystopping': earlystopping.state_dict()
         # Do not save early stopping state
     }, is_best, filename, best_filename)
 
