@@ -48,13 +48,52 @@ optimizer = torch.optim.RMSprop(mdrnn.parameters(), lr=1e-3, alpha=.9)
 scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=5)
 earlystopping = EarlyStopping('min', patience=30)
 
+def convert_state_dict(state_dict):
+    """ Convert state dict to new format with NoisyLinear layers """
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        new_key = k
+        if 'gmm_linear.weight' in k:
+            new_key = k.replace('weight', 'weight_mu')
+        if 'gmm_linear.bias' in k:
+            new_key = k.replace('bias', 'bias_mu')
+        new_state_dict[new_key] = v
+
+    # Initialize the new keys for sigma and epsilon with appropriate values
+    keys = list(new_state_dict.keys())
+    for key in keys:
+        if 'weight_mu' in key:
+            base_key_sigma = key.replace('weight_mu', 'weight_sigma')
+            base_key_epsilon = key.replace('weight_mu', 'weight_epsilon')
+            new_state_dict[base_key_sigma] = torch.zeros_like(new_state_dict[key])
+            new_state_dict[base_key_epsilon] = torch.zeros_like(new_state_dict[key])
+        if 'bias_mu' in key:
+            base_key_sigma = key.replace('bias_mu', 'bias_sigma')
+            base_key_epsilon = key.replace('bias_mu', 'bias_epsilon')
+            new_state_dict[base_key_sigma] = torch.zeros_like(new_state_dict[key])
+            new_state_dict[base_key_epsilon] = torch.zeros_like(new_state_dict[key])
+
+    return new_state_dict
+
 if exists(rnn_file) and not args.noreload:
     rnn_state = torch.load(rnn_file)
     print(f"Loading MDRNN at epoch {rnn_state['epoch']} with test error {rnn_state['precision']}")
-    mdrnn.load_state_dict(rnn_state['state_dict'])
-    optimizer.load_state_dict(rnn_state['optimizer'])
+    # Convert state dict to match new format
+    new_state_dict = convert_state_dict(rnn_state['state_dict'])
+    mdrnn.load_state_dict(new_state_dict, strict=False)
+    
+    # Reinitialize the optimizer with the model's parameters
+    optimizer = torch.optim.RMSprop(mdrnn.parameters(), lr=1e-3, alpha=.9)
+    try:
+        optimizer.load_state_dict(rnn_state['optimizer'])
+    except ValueError:
+        print("Optimizer state dict mismatch, starting with a fresh optimizer.")
+    
     scheduler.load_state_dict(rnn_state['scheduler'])
-    earlystopping.load_state_dict(rnn_state['earlystopping'])
+    if 'earlystopping' in rnn_state:
+        earlystopping.load_state_dict(rnn_state['earlystopping'])
+    else:
+        print("Early stopping state dict not found, starting with a fresh early stopping.")
 
 # Data Loading
 transform = transforms.Lambda(lambda x: np.transpose(x, (0, 3, 1, 2)) / 255)

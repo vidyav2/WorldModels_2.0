@@ -1,0 +1,36 @@
+/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/gym/utils/passive_env_checker.py:233: DeprecationWarning: `np.bool8` is a deprecated alias for `np.bool_`.  (Deprecated NumPy 1.24)
+  if not isinstance(terminated, (bool, np.bool8)):
+Process Process-15:
+Traceback (most recent call last):
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/mnt/c/Users/Vidyavarshini/WorldModels_2.0/traincontroller.py", line 84, in slave_routine
+    r_queue.put((s_id, r_gen.rollout(params)))
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Vidyavarshini/WorldModels_2.0/utils/misc.py", line 226, in rollout
+    obs = transform(obs[:84, :, :]).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/transforms.py", line 95, in __call__
+    img = t(img)
+          ^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1541, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/transforms.py", line 354, in forward
+    return F.resize(img, self.size, self.interpolation, self.max_size, self.antialias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/functional.py", line 468, in resize
+    return F_pil.resize(img, size=output_size, interpolation=pil_interpolation)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/_functional_pil.py", line 250, in resize
+    return img.resize(tuple(size[::-1]), interpolation)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/PIL/Image.py", line 2222, in resize
+    return self._new(self.im.resize(size, resample, box))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

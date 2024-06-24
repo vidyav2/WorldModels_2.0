@@ -1,8 +1,3 @@
-# mdrnn.py
-"""
-Define MDRNN model, supposed to be used as a world model
-on the latent space.
-"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
@@ -22,14 +17,14 @@ def gmm_loss(batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many
     :args mus: (bs1, bs2, *, gs, fs) torch tensor
     :args sigmas: (bs1, bs2, *, gs, fs) torch tensor
     :args logpi: (bs1, bs2, *, gs) torch tensor
-    :args reduce: if not reduce, the mean in the following formula is ommited
+    :args reduce: if not reduce, the mean in the following formula is omitted
 
     :returns:
     loss(batch) = - mean_{i1=0..bs1, i2=0..bs2, ...} log(
         sum_{k=1..gs} pi[i1, i2, ..., k] * N(
             batch[i1, i2, ..., :] | mus[i1, i2, ..., k, :], sigmas[i1, i2, ..., k, :]))
 
-    NOTE: The loss is not reduced along the feature dimension (i.e. it should scale ~linearily
+    NOTE: The loss is not reduced along the feature dimension (i.e. it should scale ~linearly
     with fs).
     """
     batch = batch.unsqueeze(-2)
@@ -57,6 +52,9 @@ class _MDRNNBase(nn.Module):
 
         self.gmm_linear = NoisyLinear(  # Use NoisyLinear
             hiddens, (2 * latents + 1) * gaussians + 2)
+
+    def reset_noise(self):
+        self.gmm_linear.reset_noise()
 
     def forward(self, *inputs):
         pass

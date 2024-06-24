@@ -1,4 +1,3 @@
-# controller.py
 import torch
 import torch.nn as nn
 from noisy_layer import NoisyLinear  # Import NoisyLinear
