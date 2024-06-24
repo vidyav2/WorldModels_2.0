@@ -1,4 +1,5 @@
 import argparse
+from multiprocessing import reduction
 from os.path import join, exists, isdir
 from os import mkdir, listdir
 
@@ -57,11 +58,8 @@ if not thread_dirs:
 
 print(f"Found thread directories: {thread_dirs}")
 
-dataset_train = RolloutObservationDataset(thread_dirs, transform_train, train=True)##
+dataset_train = RolloutObservationDataset(thread_dirs, transform_train, train=True)
 dataset_test = RolloutObservationDataset(thread_dirs, transform_test, train=False)
-
-#print(f"Training dataset size: {len(dataset_train)}")
-#print(f"Testing dataset size: {len(dataset_test)}")
 
 if len(dataset_train) == 0 or len(dataset_test) == 0:
     raise ValueError("Datasets are empty. Check if the data is correctly placed in the specified path.")
@@ -76,13 +74,39 @@ optimizer = optim.Adam(model.parameters())
 scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=5)
 earlystopping = EarlyStopping('min', patience=30)
 
-# Reconstruction + KL divergence losses summed over all elements and batch
 def loss_function(recon_x, x, mu, logsigma):
     """ VAE loss function """
-    #BCE = F.mse_loss(recon_x, x, reduction='sum')##  
-    BCE = F.mse_loss(recon_x, x, size_average=False)
+    #BCE = F.mse_loss(recon_x, x, size_average=False)
+    BCE = F.mse_loss(recon_x, x, reduction='sum')
     KLD = -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
     return BCE + KLD
+
+def convert_state_dict(state_dict):
+    """ Convert state dict to new format with NoisyLinear layers """
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        new_key = k
+        if 'fc_mu.weight' in k or 'fc_logsigma.weight' in k or 'fc1.weight' in k:
+            new_key = k.replace('weight', 'weight_mu')
+        if 'fc_mu.bias' in k or 'fc_logsigma.bias' in k or 'fc1.bias' in k:
+            new_key = k.replace('bias', 'bias_mu')
+        new_state_dict[new_key] = v
+
+    # Initialize the new keys for sigma and epsilon with appropriate values
+    keys = list(new_state_dict.keys())
+    for key in keys:
+        if 'weight_mu' in key:
+            base_key_sigma = key.replace('weight_mu', 'weight_sigma')
+            base_key_epsilon = key.replace('weight_mu', 'weight_epsilon')
+            new_state_dict[base_key_sigma] = torch.zeros_like(new_state_dict[key])
+            new_state_dict[base_key_epsilon] = torch.zeros_like(new_state_dict[key])
+        if 'bias_mu' in key:
+            base_key_sigma = key.replace('bias_mu', 'bias_sigma')
+            base_key_epsilon = key.replace('bias_mu', 'bias_epsilon')
+            new_state_dict[base_key_sigma] = torch.zeros_like(new_state_dict[key])
+            new_state_dict[base_key_epsilon] = torch.zeros_like(new_state_dict[key])
+
+    return new_state_dict
 
 def train(epoch):
     """ One training epoch """
@@ -92,6 +116,7 @@ def train(epoch):
     for batch_idx, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
+        model.reset_noise()  # Reset noise in NoisyLinear layers
         recon_batch, mu, logvar = model(data)
         loss = loss_function(recon_batch, data, mu, logvar)
         loss.backward()
@@ -102,8 +127,7 @@ def train(epoch):
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader),
                 loss.item() / len(data)
-                #))
-
+            #))
     print('====> Epoch: {} Average loss: {:.4f}'.format(
         epoch, train_loss / len(train_loader.dataset)))
 
@@ -115,6 +139,7 @@ def test():
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)
+            model.reset_noise()  # Reset noise in NoisyLinear layers
             recon_batch, mu, logvar = model(data)
             test_loss += loss_function(recon_batch, data, mu, logvar).item()
 
@@ -134,11 +159,22 @@ if not args.noreload and exists(reload_file):
           ", with test error {}".format(
               state['epoch'],
               state['precision']))
-    model.load_state_dict(state['state_dict'])
-    optimizer.load_state_dict(state['optimizer'])
+    # Convert state dict to match new format
+    new_state_dict = convert_state_dict(state['state_dict'])
+    model.load_state_dict(new_state_dict, strict=False)
+
+    # Reinitialize the optimizer with the model's parameters
+    optimizer = optim.Adam(model.parameters())
+    try:
+        optimizer.load_state_dict(state['optimizer'])
+    except ValueError:
+        print("Optimizer state dict mismatch, starting with a fresh optimizer.")
+
     scheduler.load_state_dict(state['scheduler'])
-    # Skip loading early stopping state
-    earlystopping.load_state_dict(state['earlystopping'])
+    if 'earlystopping' in state:
+        earlystopping.load_state_dict(state['earlystopping'])
+    else:
+        print("Early stopping state dict not found, starting with a fresh early stopping.")
 
 cur_best = None
 
@@ -161,7 +197,6 @@ for epoch in range(1, args.epochs + 1):
         'optimizer': optimizer.state_dict(),
         'scheduler': scheduler.state_dict(),
         'earlystopping': earlystopping.state_dict()
-        # Do not save early stopping state
     }, is_best, filename, best_filename)
 
     if not args.nosamples:

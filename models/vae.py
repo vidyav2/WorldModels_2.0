@@ -1,3 +1,4 @@
+# vae.py
 """
 Variational encoder model, used as a visual model
 for our model of the world.
@@ -5,6 +6,7 @@ for our model of the world.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from noisy_layer import NoisyLinear  # Import NoisyLinear
 
 class Decoder(nn.Module):
     """ VAE decoder """
@@ -13,7 +15,7 @@ class Decoder(nn.Module):
         self.latent_size = latent_size
         self.img_channels = img_channels
 
-        self.fc1 = nn.Linear(latent_size, 1024)
+        self.fc1 = NoisyLinear(latent_size, 1024)  # Use NoisyLinear
         self.deconv1 = nn.ConvTranspose2d(1024, 128, 5, stride=2)
         self.deconv2 = nn.ConvTranspose2d(128, 64, 5, stride=2)
         self.deconv3 = nn.ConvTranspose2d(64, 32, 6, stride=2)
@@ -41,9 +43,8 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
         self.conv3 = nn.Conv2d(64, 128, 4, stride=2)
         self.conv4 = nn.Conv2d(128, 256, 4, stride=2)
 
-        self.fc_mu = nn.Linear(2*2*256, latent_size)
-        self.fc_logsigma = nn.Linear(2*2*256, latent_size)
-
+        self.fc_mu = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
+        self.fc_logsigma = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
 
     def forward(self, x): # pylint: disable=arguments-differ
         x = F.relu(self.conv1(x))
@@ -72,3 +73,8 @@ class VAE(nn.Module):
 
         recon_x = self.decoder(z)
         return recon_x, mu, logsigma
+
+    def reset_noise(self):  # Add this method
+        self.encoder.fc_mu.reset_noise()
+        self.encoder.fc_logsigma.reset_noise()
+        self.decoder.fc1.reset_noise()

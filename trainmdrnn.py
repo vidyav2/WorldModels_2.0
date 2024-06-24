@@ -128,12 +128,14 @@ def data_pass(epoch, train, include_reward):
         latent_obs, latent_next_obs = to_latent(obs, next_obs)
 
         if train:
+            mdrnn.reset_noise()  # Reset noise in NoisyLinear layers
             losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward)
             optimizer.zero_grad()
             losses['loss'].backward()
             optimizer.step()
         else:
             with torch.no_grad():
+                mdrnn.reset_noise()  # Reset noise in NoisyLinear layers
                 losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward)
 
         cum_loss += losses['loss'].item()

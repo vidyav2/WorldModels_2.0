@@ -1,3 +1,4 @@
+# mdrnn.py
 """
 Define MDRNN model, supposed to be used as a world model
 on the latent space.
@@ -6,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.distributions.normal import Normal
+from noisy_layer import NoisyLinear  # Import NoisyLinear
 
 def gmm_loss(batch, mus, sigmas, logpi, reduce=True): # pylint: disable=too-many-arguments
     """ Computes the gmm loss.
@@ -53,7 +55,7 @@ class _MDRNNBase(nn.Module):
         self.hiddens = hiddens
         self.gaussians = gaussians
 
-        self.gmm_linear = nn.Linear(
+        self.gmm_linear = NoisyLinear(  # Use NoisyLinear
             hiddens, (2 * latents + 1) * gaussians + 2)
 
     def forward(self, *inputs):
@@ -152,3 +154,6 @@ class MDRNNCell(_MDRNNBase):
         d = out_full[:, -1]
 
         return mus, sigmas, logpi, r, d, next_hidden
+
+    def reset_noise(self):  # Add this method
+        self.gmm_linear.reset_noise()
