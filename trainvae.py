@@ -70,9 +70,10 @@ test_loader = torch.utils.data.DataLoader(
     dataset_test, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
 model = VAE(3, LSIZE).to(device)
-optimizer = optim.Adam(model.parameters())
+optimizer = optim.Adam(model.parameters()) #Added learning rate
+#optimizer = optim.Adam(model.parameters(), lr=1e-4) #Added learning rate
 scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=5)
-earlystopping = EarlyStopping('min', patience=30)
+earlystopping = EarlyStopping('min', patience=30) #Increased patience from 30 to 50
 
 def loss_function(recon_x, x, mu, logsigma):
     """ VAE loss function """
