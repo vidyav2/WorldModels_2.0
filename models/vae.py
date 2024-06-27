@@ -45,7 +45,9 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
         self.fc_mu = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
         self.fc_logsigma = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
-        
+
+        #self.fc_mu = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
+        #self.fc_logsigma = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
 
     def forward(self, x): # pylint: disable=arguments-differ
         x = F.relu(self.conv1(x))

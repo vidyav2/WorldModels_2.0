@@ -1,4 +1,3 @@
-# noisy_layer.py
 import math
 import torch
 import torch.nn as nn
@@ -41,3 +40,23 @@ class NoisyLinear(nn.Module):
             weight = self.weight_mu
             bias = self.bias_mu
         return F.linear(input, weight, bias)
+    
+    def print_parameters(self):
+        print("Weight Mu: \n", self.weight_mu)
+        print("Weight Sigma: \n", self.weight_sigma)
+        print("Weight Epsilon: \n", self.weight_epsilon)
+        print("Bias Mu: \n", self.bias_mu)
+        print("Bias Sigma: \n", self.bias_sigma)
+        print("Bias Epsilon: \n", self.bias_epsilon)
+
+        # For more detailed output, you could also consider:
+        noisy_weight = self.weight_mu + self.weight_sigma * self.weight_epsilon
+        noisy_bias = self.bias_mu + self.bias_sigma * self.bias_epsilon
+        print("Noisy Weight: \n", noisy_weight)
+        print("Noisy Bias: \n", noisy_bias)
+
+if __name__ == "__main__":
+    # Initialize NoisyLinear with example dimensions
+    noisy_layer = NoisyLinear(in_features=10, out_features=5)
+    # Print the parameters of the NoisyLinear layer
+    noisy_layer.print_parameters()

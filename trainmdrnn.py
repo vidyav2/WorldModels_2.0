@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Constants
 BSIZE = 16
 SEQ_LEN = 32
-epochs = 100
+epochs = 30
 
 # Loading VAE
 vae_file = join(args.logdir, 'vaeNew', 'best.tar')
@@ -145,6 +145,9 @@ def get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_rewa
     mse = f.mse_loss(rs, reward) if include_reward else 0
     scale = LSIZE + 2 if include_reward else LSIZE + 1
     loss = (gmm + bce + mse) / scale
+    # Print debug information
+    #print(f"gmm: {gmm.item()}, bce: {bce.item()}, mse: {mse.item() if hasattr(mse, 'item') else mse}")
+
     return dict(gmm=gmm, bce=bce, mse=mse, loss=loss)
 
 def data_pass(epoch, train, include_reward):
@@ -164,18 +167,21 @@ def data_pass(epoch, train, include_reward):
     for i, data in enumerate(loader):
         obs, action, reward, terminal, next_obs = [arr.to(device) for arr in data]
 
+        # Print shapes and unique values to debug
+        #print(f"obs shape: {obs.shape}, terminal unique values: {torch.unique(terminal)}")
+        
         latent_obs, latent_next_obs = to_latent(obs, next_obs)
 
         if train:
             mdrnn.reset_noise()  # Reset noise in NoisyLinear layers
-            losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward)
+            losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward=True)
             optimizer.zero_grad()
             losses['loss'].backward()
             optimizer.step()
         else:
             with torch.no_grad():
                 mdrnn.reset_noise()  # Reset noise in NoisyLinear layers
-                losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward)
+                losses = get_loss(latent_obs, action, reward, terminal, latent_next_obs, include_reward=True)
 
         cum_loss += losses['loss'].item()
         cum_gmm += losses['gmm'].item()
