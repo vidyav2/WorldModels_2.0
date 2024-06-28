@@ -102,7 +102,7 @@ class RolloutGenerator(object):
     :attr mdrnn: MDRNN model loaded from mdir/mdrnn
     :attr controller: Controller, either loaded from mdir/ctrl or randomly
         initialized
-    :attr env: instance of the CarRacing-v0 gym environment
+    :attr env: instance of the CarRacing-v2 gym environment
     :attr device: device used to run VAE, MDRNN and Controller
     :attr time_limit: rollouts have a maximum of time_limit timesteps
     """

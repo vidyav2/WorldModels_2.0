@@ -5,14 +5,14 @@ import numpy as np
 from utils.misc import sample_continuous_policy
 
 def generate_data(rollouts, data_dir, noise_type):
-    """ Generates data """
+    """Generates data"""
     assert exists(data_dir), "The data directory does not exist..."
 
-    env = gym.make("CarRacing-v2")
+    env = gym.make("CarRacing-v2", render_mode="human")
     seq_len = 1000
 
     for i in range(rollouts):
-        env.reset()
+        obs, _ = env.reset()
         if hasattr(env, 'viewer') and env.viewer:
             env.viewer.window.dispatch_events()
 
@@ -26,8 +26,11 @@ def generate_data(rollouts, data_dir, noise_type):
         d_rollout = []
 
         t = 0
+        cumulative_reward = 0
         while t < seq_len:
             action = a_rollout[t]
+            action += np.random.normal(0, 0.1, size=action.shape)  # Adding noise
+            action = np.clip(action, -1, 1)  # Clipping actions to valid range
             t += 1
 
             step_output = env.step(action)
@@ -39,12 +42,15 @@ def generate_data(rollouts, data_dir, noise_type):
 
             if hasattr(env, 'viewer') and env.viewer:
                 env.viewer.window.dispatch_events()
+            env.render()
 
             s_rollout.append(s)
             r_rollout.append(r)
-            d_rollout.append(done)
+            d_rollout.append(bool(done))
+            cumulative_reward += r
+            print(f"Step {t}, Reward: {r}, Done: {done}")  # Detailed step reward
             if done:
-                #print(f"> End of rollout {i}, {len(s_rollout)} frames...")
+                print(f"> End of rollout {i}, {len(s_rollout)} frames, final reward: {cumulative_reward}")
                 break
 
         np.savez(join(data_dir, f'rollout_{i}'),
