@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Constants
 BSIZE = 16
 SEQ_LEN = 32
-epochs = 30
+epochs = 100
 
 # Loading VAE
 vae_file = join(args.logdir, 'vaeNew', 'best.tar')
