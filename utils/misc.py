@@ -160,11 +160,11 @@ class RolloutGenerator(object):
     ###    # create video writer from cv2
         self.writer = cv2.VideoWriter('output.avi', 
                          cv2.VideoWriter_fourcc(*'MJPG'),
-                         50, (128, 128))
+                         50, (64, 64))
         
-        self.dream_writer = cv2.VideoWriter('dream_output.avi',
+        """self.dream_writer = cv2.VideoWriter('dream_output.avi',
                             cv2.VideoWriter_fourcc(*'MJPG'),
-                            50, (64, 64))  ### 
+                            50, (64, 64))"""  ### 
 
     def get_action_and_transition(self, obs, hidden):
         """ Get action and transition.
@@ -189,7 +189,7 @@ class RolloutGenerator(object):
         # convert to BGR
         recon_obs = cv2.cvtColor(recon_obs, cv2.COLOR_RGB2BGR)
         # write to video
-        self.dream_writer.write(recon_obs)
+        self.writer.write(recon_obs)
 
         action = self.controller(latent_mu, hidden[0])
         _, _, _, _, _, next_hidden = self.mdrnn(action, latent_mu, hidden)
@@ -233,6 +233,6 @@ class RolloutGenerator(object):
             cumulative += reward
             if done or i > self.time_limit:
                 self.writer.release()
-                self.dream_writer.release()
+                #self.dream_writer.release()
                 return - cumulative
             i += 1
