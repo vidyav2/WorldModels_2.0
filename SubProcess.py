@@ -14,9 +14,9 @@ def main():
     # List of Python scripts and their arguments to run sequentially
     scripts = [
         #['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/data/generation_script.py', '--rollouts', '5000', '--rootdir', 'datasets/carracing', '--threads', '8'],
-        #['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/trainvae.py'],
-        ['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/trainmdrnn.py', '--logdir', 'exp_dir',],
-        ['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/traincontroller.py', '--logdir', 'exp_dir', '--n-samples', '4', '--pop-size', '4', '--target-return', '950', '--display']
+        ['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/trainvae.py', '--logdir', 'exp_dir'],
+        ['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/trainmdrnn.py', '--logdir', 'exp_dir'],
+        ['python3', '/mnt/c/Users/Vidyavarshini/WorldModels_2.0/traincontroller.py', '--logdir', 'exp_dir', '--n-samples', '16', '--pop-size', '4', '--target-return', '950', '--display']
         # Add the specific arguments for traincontroller.py script
     ]
 

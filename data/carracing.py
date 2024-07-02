@@ -1,18 +1,19 @@
 import argparse
 from os.path import join, exists
-import gym
+import gymnasium as gym
 import numpy as np
 from utils.misc import sample_continuous_policy
+import imageio
 
 def generate_data(rollouts, data_dir, noise_type):
-    """Generates data"""
     assert exists(data_dir), "The data directory does not exist..."
 
-    env = gym.make("CarRacing-v2", render_mode="human")
+    #env = gym.make("CarRacing-v2",continuous=False)
+    env = gym.make("CarRacing-v2", render_mode="rgb_array", lap_complete_percent=1)
     seq_len = 1000
 
     for i in range(rollouts):
-        obs, _ = env.reset()
+        env.reset()
         if hasattr(env, 'viewer') and env.viewer:
             env.viewer.window.dispatch_events()
 
@@ -26,19 +27,19 @@ def generate_data(rollouts, data_dir, noise_type):
         d_rollout = []
 
         t = 0
-        cumulative_reward = 0
-        while t < seq_len:
+        #cumulative_reward = 0
+        #done = False
+        while True:
+            print("tester",t)
+            #print("action",{a_rollout[t-1]})
             action = a_rollout[t]
-            action += np.random.normal(0, 0.1, size=action.shape)  # Adding noise
-            action = np.clip(action, -1, 1)  # Clipping actions to valid range
             t += 1
+            #action += np.random.normal(0, 0.05, size=action.shape)  # Reduced noise
+            #action = np.clip(action, -1, 1)  # Clipping actions to valid range
 
-            step_output = env.step(action)
-            if len(step_output) == 5:
-                s, r, done, truncated, _ = step_output
-                done = done or truncated  # Handle truncated as done
-            else:
-                s, r, done, _ = step_output
+            #s,r,done, _, _= env.step(action)
+            s, r, done,_,_ = env.step(action)
+            #done = terminated or truncated
 
             if hasattr(env, 'viewer') and env.viewer:
                 env.viewer.window.dispatch_events()
@@ -46,18 +47,30 @@ def generate_data(rollouts, data_dir, noise_type):
 
             s_rollout.append(s)
             r_rollout.append(r)
-            d_rollout.append(bool(done))
-            cumulative_reward += r
-            print(f"Step {t}, Reward: {r}, Done: {done}")  # Detailed step reward
-            if done:
-                print(f"> End of rollout {i}, {len(s_rollout)} frames, final reward: {cumulative_reward}")
-                break
+            d_rollout.append(done)
 
-        np.savez(join(data_dir, f'rollout_{i}'),
-                 observations=np.array(s_rollout),
-                 rewards=np.array(r_rollout),
-                 actions=np.array(a_rollout[:t]),
-                 terminals=np.array(d_rollout))
+
+            print(f"Reward: {r}, Done: {done}, Action: {action}")  # Detailed step reward
+
+            if done:
+                print(f"> End of rollout {i}, {len(s_rollout)} frames")
+                #break
+
+            #t += 1
+
+            #if  t < seq_len:
+            #s_rollout.append(np.zeros_like(s))
+            #r_rollout.append(0)
+            #d_rollout.append(True)
+            #t += 1
+
+                np.savez(join(data_dir, f'rollout_{i}'),
+                    observations=np.array(s_rollout),
+                    rewards=np.array(r_rollout),
+                    actions=np.array(a_rollout),
+                    terminals=np.array(d_rollout))
+                break
+    env.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
