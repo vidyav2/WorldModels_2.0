@@ -1,38 +1,25 @@
-import os
+""" Some data loading utilities """
 from bisect import bisect
-from os.path import join
+from os import listdir
+from os.path import join, isdir
 from tqdm import tqdm
 import torch
 import torch.utils.data
 import numpy as np
 
-class _RolloutDataset(torch.utils.data.Dataset):
-    def __init__(self, roots, transform, buffer_size=200, train=True):
+class _RolloutDataset(torch.utils.data.Dataset): # pylint: disable=too-few-public-methods
+    def __init__(self, root, transform, buffer_size=200, train=True): # pylint: disable=too-many-arguments
         self._transform = transform
-        self._files = []
 
-        if isinstance(roots, str):
-            roots = [roots]
-
-        for root in roots:
-            if os.path.isdir(root):
-                for dirpath, _, filenames in os.walk(root):
-                    for fname in filenames:
-                        fpath = join(dirpath, fname)
-                        if os.path.isfile(fpath) and fpath.endswith('.npz'):
-                            self._files.append(fpath)
-
-        print(f"Total files found: {len(self._files)}")
+        self._files = [
+            join(root, sd, ssd)
+            for sd in listdir(root) if isdir(join(root, sd))
+            for ssd in listdir(join(root, sd))]
 
         if train:
             self._files = self._files[:-600]
         else:
             self._files = self._files[-600:]
-
-        print(f"{'Training' if train else 'Testing'} dataset size after split: {len(self._files)}")
-
-        if not self._files:
-            raise ValueError("No data files found in the specified directories.")
 
         self._cum_size = None
         self._buffer = None
@@ -41,31 +28,35 @@ class _RolloutDataset(torch.utils.data.Dataset):
         self._buffer_size = buffer_size
 
     def load_next_buffer(self):
-        if len(self._files) == 0:
-            raise ValueError("No data files found.")
-
+        """ Loads next buffer """
         self._buffer_fnames = self._files[self._buffer_index:self._buffer_index + self._buffer_size]
         self._buffer_index += self._buffer_size
         self._buffer_index = self._buffer_index % len(self._files)
         self._buffer = []
         self._cum_size = [0]
 
-        pbar = tqdm(total=len(self._buffer_fnames), bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}')
+        # progress bar
+        pbar = tqdm(total=len(self._buffer_fnames),
+                    bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} {postfix}')
         pbar.set_description("Loading file buffer ...")
 
         for f in self._buffer_fnames:
             with np.load(f) as data:
                 self._buffer += [{k: np.copy(v) for k, v in data.items()}]
-                self._cum_size += [self._cum_size[-1] + self._data_per_sequence(data['rewards'].shape[0])]
+                self._cum_size += [self._cum_size[-1] +
+                                   self._data_per_sequence(data['rewards'].shape[0])]
             pbar.update(1)
         pbar.close()
 
     def __len__(self):
+        # to have a full sequence, you need self.seq_len + 1 elements, as
+        # you must produce both an seq_len obs and seq_len next_obs sequences
         if not self._cum_size:
             self.load_next_buffer()
         return self._cum_size[-1]
 
     def __getitem__(self, i):
+        # binary search through cum_size
         file_index = bisect(self._cum_size, i) - 1
         seq_index = i - self._cum_size[file_index]
         data = self._buffer[file_index]
@@ -77,7 +68,8 @@ class _RolloutDataset(torch.utils.data.Dataset):
     def _data_per_sequence(self, data_length):
         pass
 
-class RolloutSequenceDataset(_RolloutDataset):
+
+class RolloutSequenceDataset(_RolloutDataset): # pylint: disable=too-few-public-methods
     """ Encapsulates rollouts.
 
     Rollouts should be stored in subdirs of the root directory, in the form of npz files,
@@ -106,7 +98,7 @@ class RolloutSequenceDataset(_RolloutDataset):
     :args transform: transformation of the observations
     :args train: if True, train data, else test
     """
-    def __init__(self, root, seq_len, transform, buffer_size=200, train=True):
+    def __init__(self, root, seq_len, transform, buffer_size=200, train=True): # pylint: disable=too-many-arguments
         super().__init__(root, transform, buffer_size, train)
         self._seq_len = seq_len
 
@@ -114,15 +106,19 @@ class RolloutSequenceDataset(_RolloutDataset):
         obs_data = data['observations'][seq_index:seq_index + self._seq_len + 1]
         obs_data = self._transform(obs_data.astype(np.float32))
         obs, next_obs = obs_data[:-1], obs_data[1:]
-        action = data['actions'][seq_index + 1:seq_index + self._seq_len + 1].astype(np.float32)
-        reward, terminal = [data[key][seq_index + 1:seq_index + self._seq_len + 1].astype(np.float32) for key in ('rewards', 'terminals')]
-
+        action = data['actions'][seq_index+1:seq_index + self._seq_len + 1]
+        action = action.astype(np.float32)
+        reward, terminal = [data[key][seq_index+1:
+                                      seq_index + self._seq_len + 1].astype(np.float32)
+                            for key in ('rewards', 'terminals')]
+        # data is given in the form
+        # (obs, action, reward, terminal, next_obs)
         return obs, action, reward, terminal, next_obs
 
     def _data_per_sequence(self, data_length):
         return data_length - self._seq_len
 
-class RolloutObservationDataset(_RolloutDataset):
+class RolloutObservationDataset(_RolloutDataset): # pylint: disable=too-few-public-methods
     """ Encapsulates rollouts.
 
     Rollouts should be stored in subdirs of the root directory, in the form of npz files,

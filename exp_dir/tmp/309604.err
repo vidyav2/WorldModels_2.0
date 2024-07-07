@@ -1,0 +1,23 @@
+/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/gym/envs/box2d/car_racing.py:569: UserWarning: [33mWARN: You are calling render method without specifying any render mode. You can specify the render_mode at initialization, e.g. gym("CarRacing-v2", render_mode="rgb_array")[0m
+  gym.logger.warn(
+Process Process-10:
+Traceback (most recent call last):
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
+    self.run()
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/multiprocessing/process.py", line 108, in run
+    self._target(*self._args, **self._kwargs)
+  File "/mnt/c/Users/Vidyavarshini/WorldModels_2.0/traincontroller.py", line 85, in slave_routine
+    r_queue.put((s_id, r_gen.rollout(params)))
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/c/Users/Vidyavarshini/WorldModels_2.0/utils/misc.py", line 190, in rollout
+    obs = transform(obs).unsqueeze(0).to(self.device)
+          ^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/transforms.py", line 95, in __call__
+    img = t(img)
+          ^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/transforms.py", line 234, in __call__
+    return F.to_pil_image(pic, self.mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vidyav2/miniconda3/envs/wmnew/lib/python3.12/site-packages/torchvision/transforms/functional.py", line 268, in to_pil_image
+    raise TypeError(f"pic should be Tensor or ndarray. Got {type(pic)}.")
+TypeError: pic should be Tensor or ndarray. Got <class 'tuple'>.
