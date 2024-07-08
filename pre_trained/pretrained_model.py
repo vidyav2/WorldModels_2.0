@@ -3,7 +3,6 @@ import numpy as np
 import torch
 from torch import nn
 from torchvision import transforms
-from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 class LSTMController(nn.Module):
     def __init__(self, input_dim, num_hidden, output_dim, output_activation="tanh"):
@@ -22,7 +21,7 @@ class LSTMController(nn.Module):
         return x
 
     def reset(self):
-        self._hidden = (torch.zeros((1, 1, self._hidden_size)), torch.zeros((1, 1, self._hidden_size)))
+        self._hidden = (torch.zeros((1, 1, self._hidden_size)).cuda(), torch.zeros((1, 1, self._hidden_size)).cuda())
 
 class SelfAttention(nn.Module):
     def __init__(self, data_dim, dim_q):
@@ -62,7 +61,7 @@ class CarRacingAgent(nn.Module):
             for j in range(n):
                 patch_center_col = offset + j * patch_stride
                 patch_centers.append([patch_center_row, patch_center_col])
-        self._patch_centers = torch.tensor(patch_centers).float()
+        self._patch_centers = torch.tensor(patch_centers).float().cuda()
         self.attention = SelfAttention(data_dim=data_dim * self._patch_size ** 2, dim_q=query_dim)
         self.controller = LSTMController(input_dim=self._top_k * 2, output_dim=output_dim, num_hidden=num_hidden, output_activation=output_activation)
         self.eval()
@@ -86,8 +85,8 @@ class CarRacingAgent(nn.Module):
 
     def step(self, obs):
         with torch.no_grad():
-            x = self._transform(obs)
-            actions = self.forward(x).numpy()
+            x = self._transform(obs).cuda()
+            actions = self.forward(x).cpu().numpy()  # Move back to CPU for compatibility with gym
         return actions, None
 
     def reset(self):
@@ -107,5 +106,5 @@ def load_pretrained_agent(params_path):
         normalize_positions=True,
     )
     params = np.load(params_path)['params'].flatten()
-    vector_to_parameters(torch.tensor(params), agent.parameters())
+    torch.nn.utils.vector_to_parameters(torch.tensor(params, dtype=torch.float32).cuda(), agent.parameters())
     return agent

@@ -59,8 +59,8 @@ def check_track_completion(rollout_dir):
     return track_completions
 
 # Run the analysis
-rollout_dir = 'rollouts'
-output_dir = 'visualizations'
+rollout_dir = 'pre_trained/rollouts'
+output_dir = 'pre_trained/visualizations'
 
 print("Visualizing rollouts...")
 for filename in os.listdir(rollout_dir):
