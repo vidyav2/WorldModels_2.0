@@ -4,7 +4,7 @@ Generating data from the CarRacing gym environment.
 """
 import argparse
 from os.path import join, exists
-import gym
+import gymnasium as gym
 import numpy as np
 from utils.misc import sample_continuous_policy
 
