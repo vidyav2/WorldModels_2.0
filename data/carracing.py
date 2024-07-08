@@ -1,62 +1,57 @@
+"""
+Generating data from the CarRacing gym environment.
+!!! DOES NOT WORK ON TITANIC, DO IT AT HOME, THEN SCP !!!
+"""
 import argparse
 from os.path import join, exists
-import gymnasium as gym
+import gym
 import numpy as np
-from utils.misc import sample_mixed_policy
-from PIL import Image
+from utils.misc import sample_continuous_policy
 
-def generate_data(rollouts, data_dir, noise_type, seq_len=1000, gif_file=None):
+def generate_data(rollouts, data_dir, noise_type): # pylint: disable=R0914
+    """ Generates data """
     assert exists(data_dir), "The data directory does not exist..."
 
-    env = gym.make("CarRacing-v2", render_mode='rgb_array')
-    all_frames = []
+    env = gym.make("CarRacing-v2")
+    seq_len = 1000
 
     for i in range(rollouts):
-        obs, _ = env.reset()
-        if gif_file:
-            frame = env.render()
-            frames = [Image.fromarray(frame).resize((320, 240))]
-
+        env.reset()
+        #env.env.viewer.window.dispatch_events()
         if noise_type == 'white':
             a_rollout = [env.action_space.sample() for _ in range(seq_len)]
-        elif noise_type in ['brown', 'mixed']:
-            a_rollout = sample_mixed_policy(env.action_space, seq_len, env)
+        elif noise_type == 'brown':
+            a_rollout = sample_continuous_policy(env.action_space, seq_len, 1. / 50)
 
-        s_rollout, r_rollout, d_rollout = [], [], []
+        s_rollout = []
+        r_rollout = []
+        d_rollout = []
 
-        for t in range(seq_len):
+        t = 0
+        while True:
             action = a_rollout[t]
-            s, r, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            if gif_file:
-                frame = env.render()
-                frames.append(Image.fromarray(frame).resize((320, 240)))
-            
-            s_rollout.append(s)
-            r_rollout.append(r)
-            d_rollout.append(done)
-            
-            if done or t == seq_len - 1:
-                print(f"> End of rollout {i}, {t+1} frames...")
+            t += 1
+
+            s, r, terminated, truncated, _ = env.step(action)
+            #env.env.viewer.window.dispatch_events()
+            s_rollout += [s]
+            r_rollout += [r]
+            d_rollout += [terminated]
+            if terminated or t >= seq_len:
+                print("> End of rollout {}, {} frames...".format(i, len(s_rollout)))
+                np.savez(join(data_dir, 'rollout_{}'.format(i)),
+                         observations=np.array(s_rollout),
+                         rewards=np.array(r_rollout),
+                         actions=np.array(a_rollout),
+                         terminals=np.array(d_rollout))
                 break
-
-        np.savez(join(data_dir, f'rollout_{i}'),
-                 observations=np.array(s_rollout),
-                 rewards=np.array(r_rollout),
-                 actions=np.array(a_rollout),
-                 terminals=np.array(d_rollout))
-        if gif_file:
-            all_frames.extend(frames)
-
-    if gif_file:
-        all_frames[0].save(gif_file, save_all=True, append_images=all_frames[1:], loop=0, duration=40)
-    env.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--rollouts', type=int, help="Number of rollouts")
     parser.add_argument('--dir', type=str, help="Where to place rollouts")
-    parser.add_argument('--policy', type=str, choices=['white', 'brown', 'mixed'], help='Noise type used for action sampling.', default='mixed')
-    parser.add_argument('--gif', type=str, help="Output GIF file", default=None)
+    parser.add_argument('--policy', type=str, choices=['white', 'brown'],
+                        help='Noise type used for action sampling.',
+                        default='brown')
     args = parser.parse_args()
-    generate_data(args.rollouts, args.dir, args.policy, gif_file=args.gif)
+    generate_data(args.rollouts, args.dir, args.policy)

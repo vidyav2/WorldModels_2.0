@@ -104,7 +104,7 @@ def load_rollout(filepath):
     data = np.load(filepath)
     observations = data['observations']
     rewards = data['rewards']
-    dones = data['dones']
+    dones = data['terminated']
     return observations, rewards, dones
 
 def visualize_rollout(observations, rewards, dones, sample_frames=10, save_dir='rollout_images'):

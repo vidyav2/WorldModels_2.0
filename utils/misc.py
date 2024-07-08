@@ -23,27 +23,24 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-def sample_mixed_policy(action_space, seq_len, env):
-    actions = []
-    for t in range(seq_len):
-        if t < 50:
-            action = np.array([-0.1, 1, 0])  # Slight left turn with acceleration
-        else:
-            rn = random.randint(0, 9)
-            if rn == 0:
-                action = np.array([0, random.random(), 0])
-            elif rn <= 4:
-                action = np.array([0, random.random(), 0])
-            elif rn <= 6:
-                action = np.array([-random.random(), 0, 0])
-            elif rn <= 8:
-                action = np.array([random.random(), 0, 0])
-            elif rn == 9:
-                action = np.array([0, 0, random.random()])
-            else:
-                action = env.action_space.sample()
-        action = np.clip(action, action_space.low, action_space.high)
-        actions.append(action)
+def sample_continuous_policy(action_space, seq_len, dt):
+    """ Sample a continuous policy.
+
+    Atm, action_space is supposed to be a box environment. The policy is
+    sampled as a brownian motion a_{t+1} = a_t + sqrt(dt) N(0, 1).
+
+    :args action_space: gym action space
+    :args seq_len: number of actions returned
+    :args dt: temporal discretization
+
+    :returns: sequence of seq_len actions
+    """
+    actions = [action_space.sample()]
+    for _ in range(seq_len):
+        daction_dt = np.random.randn(*actions[-1].shape)
+        actions.append(
+            np.clip(actions[-1] + math.sqrt(dt) * daction_dt,
+                    action_space.low, action_space.high))
     return actions
 
 def save_checkpoint(state, is_best, filename, best_filename):
