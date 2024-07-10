@@ -1,16 +1,13 @@
 import argparse
-from multiprocessing import reduction
-from os.path import join, exists, isdir
-from os import mkdir, listdir
-
+from os.path import join, exists
+from os import listdir, makedirs  # Updated import to use makedirs
 import torch
 import torch.utils.data
 from torch import optim
-from torch.nn import functional as F
 from torchvision import transforms
 from torchvision.utils import save_image
 
-from models.vae import VAE
+from models.vae import VAE  # Adjust the import according to your VAE model's location
 from utils.misc import save_checkpoint, LSIZE, RED_SIZE
 from utils.learning import EarlyStopping, ReduceLROnPlateau
 from data.loaders import RolloutObservationDataset
@@ -47,19 +44,13 @@ transform_test = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-dataset_path = 'datasets/carracing'
+dataset_path = 'pre_trained/rollouts'
 if not exists(dataset_path):
     raise FileNotFoundError(f"Dataset path {dataset_path} does not exist.")
-print(f"Contents of {dataset_path}: {listdir(dataset_path)}")
+#print(f"Contents of {dataset_path}: {listdir(dataset_path)}")
 
-thread_dirs = [join(dataset_path, d) for d in listdir(dataset_path) if 'thread' in d and isdir(join(dataset_path, d))]
-if not thread_dirs:
-    raise ValueError("No thread directories found in the dataset path.")
-
-print(f"Found thread directories: {thread_dirs}")
-
-dataset_train = RolloutObservationDataset(thread_dirs, transform_train, train=True)
-dataset_test = RolloutObservationDataset(thread_dirs, transform_test, train=False)
+dataset_train = RolloutObservationDataset(dataset_path, transform=transform_train, train=True)
+dataset_test = RolloutObservationDataset(dataset_path, transform=transform_test, train=False)
 
 if len(dataset_train) == 0 or len(dataset_test) == 0:
     raise ValueError("Datasets are empty. Check if the data is correctly placed in the specified path.")
@@ -70,15 +61,12 @@ test_loader = torch.utils.data.DataLoader(
     dataset_test, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
 model = VAE(3, LSIZE).to(device)
-optimizer = optim.Adam(model.parameters()) #Added learning rate
-#optimizer = optim.Adam(model.parameters(), lr=1e-4) #Added learning rate
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
 scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=5)
-earlystopping = EarlyStopping('min', patience=30) #Increased patience from 30 to 50
+earlystopping = EarlyStopping('min', patience=50)
 
 def loss_function(recon_x, x, mu, logsigma):
-    """ VAE loss function """
-    #BCE = F.mse_loss(recon_x, x, size_average=False)
-    BCE = F.mse_loss(recon_x, x, reduction='sum')
+    BCE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
     KLD = -0.5 * torch.sum(1 + 2 * logsigma - mu.pow(2) - (2 * logsigma).exp())
     return BCE + KLD
 
@@ -93,7 +81,6 @@ def convert_state_dict(state_dict):
             new_key = k.replace('bias', 'bias_mu')
         new_state_dict[new_key] = v
 
-    # Initialize the new keys for sigma and epsilon with appropriate values
     keys = list(new_state_dict.keys())
     for key in keys:
         if 'weight_mu' in key:
@@ -110,72 +97,45 @@ def convert_state_dict(state_dict):
     return new_state_dict
 
 def train(epoch):
-    """ One training epoch """
     model.train()
     dataset_train.load_next_buffer()
     train_loss = 0
     for batch_idx, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        model.reset_noise()  # Reset noise in NoisyLinear layers
+        model.reset_noise()
         recon_batch, mu, logvar = model(data)
         loss = loss_function(recon_batch, data, mu, logvar)
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
         if batch_idx % 20 == 0:
-            #print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader),
-                loss.item() / len(data)
-            #))
+                loss.item() / len(data)))
     print('====> Epoch: {} Average loss: {:.4f}'.format(
         epoch, train_loss / len(train_loader.dataset)))
 
 def test():
-    """ One test epoch """
     model.eval()
     dataset_test.load_next_buffer()
     test_loss = 0
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)
-            model.reset_noise()  # Reset noise in NoisyLinear layers
+            model.reset_noise()
             recon_batch, mu, logvar = model(data)
             test_loss += loss_function(recon_batch, data, mu, logvar).item()
-
     test_loss /= len(test_loader.dataset)
     print('====> Test set loss: {:.4f}'.format(test_loss))
     return test_loss
 
-vae_dir = join(args.logdir, 'vaeNew')
+# Ensure vae_dir is correctly defined and created
+vae_dir = join(args.logdir, 'vae')
 if not exists(vae_dir):
-    mkdir(vae_dir)
-    mkdir(join(vae_dir, 'samplesNew'))
-
-reload_file = join(vae_dir, 'best.tar')
-if not args.noreload and exists(reload_file):
-    state = torch.load(reload_file)
-    print("Reloading model at epoch {}"
-          ", with test error {}".format(
-              state['epoch'],
-              state['precision']))
-    # Convert state dict to match new format
-    new_state_dict = convert_state_dict(state['state_dict'])
-    model.load_state_dict(new_state_dict, strict=False)
-
-    # Reinitialize the optimizer with the model's parameters
-    optimizer = optim.Adam(model.parameters())
-    try:
-        optimizer.load_state_dict(state['optimizer'])
-    except ValueError:
-        print("Optimizer state dict mismatch, starting with a fresh optimizer.")
-
-    scheduler.load_state_dict(state['scheduler'])
-    if 'earlystopping' in state:
-        earlystopping.load_state_dict(state['earlystopping'])
-    else:
-        print("Early stopping state dict not found, starting with a fresh early stopping.")
+    makedirs(vae_dir)
+    makedirs(join(vae_dir, 'samples'))
 
 cur_best = None
 
@@ -185,28 +145,21 @@ for epoch in range(1, args.epochs + 1):
     scheduler.step(test_loss)
     earlystopping.step(test_loss)
 
-    best_filename = join(vae_dir, 'best.tar')
-    filename = join(vae_dir, 'checkpoint.tar')
-    is_best = not cur_best or test_loss < cur_best
-    if is_best:
+    if args.logdir:
+        checkpoint = {
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'precision': test_loss,
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict(),
+            'earlystopping': earlystopping.state_dict()
+        }
+        save_checkpoint(checkpoint, cur_best, test_loss, vae_dir)
         cur_best = test_loss
-
-    save_checkpoint({
-        'epoch': epoch,
-        'state_dict': model.state_dict(),
-        'precision': test_loss,
-        'optimizer': optimizer.state_dict(),
-        'scheduler': scheduler.state_dict(),
-        'earlystopping': earlystopping.state_dict()
-    }, is_best, filename, best_filename)
 
     if not args.nosamples:
         with torch.no_grad():
-            sample = torch.randn(RED_SIZE, LSIZE).to(device)
+            sample = torch.randn(64, LSIZE).to(device)
             sample = model.decoder(sample).cpu()
             save_image(sample.view(64, 3, RED_SIZE, RED_SIZE),
-                       join(vae_dir, 'samplesNew/sample_' + str(epoch) + '_a.png'))
-
-    if earlystopping.stop:
-        print("End of Training because of early stopping at epoch {}".format(epoch))
-        break
+                       join(vae_dir, 'samples', 'sample_' + str(epoch) + '.png'))

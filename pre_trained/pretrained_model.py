@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from torch import nn
 from torchvision import transforms
+from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 class LSTMController(nn.Module):
     def __init__(self, input_dim, num_hidden, output_dim, output_activation="tanh"):
@@ -21,7 +22,11 @@ class LSTMController(nn.Module):
         return x
 
     def reset(self):
-        self._hidden = (torch.zeros((1, 1, self._hidden_size)).cuda(), torch.zeros((1, 1, self._hidden_size)).cuda())
+        self._hidden = (torch.zeros((1, 1, self._hidden_size)), torch.zeros((1, 1, self._hidden_size)))
+
+    def to(self, device):
+        super().to(device)
+        self._hidden = (self._hidden[0].to(device), self._hidden[1].to(device))
 
 class SelfAttention(nn.Module):
     def __init__(self, data_dim, dim_q):
@@ -61,7 +66,7 @@ class CarRacingAgent(nn.Module):
             for j in range(n):
                 patch_center_col = offset + j * patch_stride
                 patch_centers.append([patch_center_row, patch_center_col])
-        self._patch_centers = torch.tensor(patch_centers).float().cuda()
+        self._patch_centers = torch.tensor(patch_centers).float()
         self.attention = SelfAttention(data_dim=data_dim * self._patch_size ** 2, dim_q=query_dim)
         self.controller = LSTMController(input_dim=self._top_k * 2, output_dim=output_dim, num_hidden=num_hidden, output_activation=output_activation)
         self.eval()
@@ -78,19 +83,24 @@ class CarRacingAgent(nn.Module):
         patch_importance = patch_importance_matrix.sum(dim=0)
         ix = torch.argsort(patch_importance, descending=True)
         top_k_ix = ix[:self._top_k]
-        centers = self._patch_centers[top_k_ix].flatten(0, -1)
+        centers = self._patch_centers[top_k_ix].flatten(0, -1).to(self.device)
         if self._normalize_positions:
             centers = centers / self._image_size
         return self.controller(centers).squeeze()
 
     def step(self, obs):
         with torch.no_grad():
-            x = self._transform(obs).cuda()
-            actions = self.forward(x).cpu().numpy()  # Move back to CPU for compatibility with gym
+            x = self._transform(obs).to(self.device)
+            actions = self.forward(x).cpu().numpy()
         return actions, None
 
     def reset(self):
         self.controller.reset()
+        
+    def set_device(self, device):
+        self.device = device
+        self.to(device)
+        self._patch_centers = self._patch_centers.to(device)
 
 def load_pretrained_agent(params_path):
     agent = CarRacingAgent(
@@ -106,5 +116,5 @@ def load_pretrained_agent(params_path):
         normalize_positions=True,
     )
     params = np.load(params_path)['params'].flatten()
-    torch.nn.utils.vector_to_parameters(torch.tensor(params, dtype=torch.float32).cuda(), agent.parameters())
+    vector_to_parameters(torch.tensor(params), agent.parameters())
     return agent

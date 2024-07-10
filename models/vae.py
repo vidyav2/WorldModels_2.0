@@ -27,7 +27,7 @@ class Decoder(nn.Module):
         x = F.relu(self.deconv1(x))
         x = F.relu(self.deconv2(x))
         x = F.relu(self.deconv3(x))
-        reconstruction = F.sigmoid(self.deconv4(x))
+        reconstruction = torch.sigmoid(self.deconv4(x))
         return reconstruction
 
 class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
@@ -35,7 +35,6 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
     def __init__(self, img_channels, latent_size):
         super(Encoder, self).__init__()
         self.latent_size = latent_size
-        #self.img_size = img_size
         self.img_channels = img_channels
 
         self.conv1 = nn.Conv2d(img_channels, 32, 4, stride=2)
@@ -45,9 +44,6 @@ class Encoder(nn.Module): # pylint: disable=too-many-instance-attributes
 
         self.fc_mu = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
         self.fc_logsigma = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
-
-        #self.fc_mu = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
-        #self.fc_logsigma = NoisyLinear(2*2*256, latent_size)  # Use NoisyLinear
 
     def forward(self, x): # pylint: disable=arguments-differ
         x = F.relu(self.conv1(x))

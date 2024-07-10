@@ -1,10 +1,9 @@
 import argparse
-import os
 from os.path import join, exists
 import numpy as np
 import gymnasium as gym
 import torch
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 import pygame
 from pretrained_model import load_pretrained_agent
 
@@ -12,21 +11,20 @@ def preprocess_observation(observation):
     observation_resized = observation / 255.0  # Normalize pixel values to [0, 1]
     return observation_resized
 
-def generate_single_rollout(env, model, seq_len, rollout_index, data_dir):
-    try:
-        env.reset()
-        # Initialize car wheels properly
-        env.render()
-        observation, _ = env.reset()
-        s_rollout = []
-        r_rollout = []
-        a_rollout = []
-        d_rollout = []
+def generate_single_rollout(rollout_id, data_dir, model, device):
+    env = gym.make("CarRacing-v2", render_mode="rgb_array")
+    seq_len = 1000
+    observation, _ = env.reset()
+    s_rollout = []
+    r_rollout = []
+    a_rollout = []
+    d_rollout = []
 
-        t = 0
-        while True:
+    t = 0
+    while True:
+        try:
             obs_processed = preprocess_observation(observation)
-            obs_tensor = torch.tensor(obs_processed, dtype=torch.float32).permute(2, 0, 1).cuda()  # Rearrange to (C, H, W) and move to GPU
+            obs_tensor = torch.tensor(obs_processed, dtype=torch.float32).permute(2, 0, 1).to(device)
             action = model.step(obs_tensor)[0]
             observation, reward, terminated, truncated, _ = env.step(action)
             
@@ -37,38 +35,40 @@ def generate_single_rollout(env, model, seq_len, rollout_index, data_dir):
             
             t += 1
             if terminated or t >= seq_len:
-                np.savez(join(data_dir, f'rollout_{rollout_index}'),
+                print(f"> End of rollout {rollout_id}, {len(s_rollout)} frames...")
+                np.savez(join(data_dir, f'rollout_{rollout_id}'),
                          observations=np.array(s_rollout),
                          rewards=np.array(r_rollout),
                          actions=np.array(a_rollout),
                          terminals=np.array(d_rollout))
                 break
-    except pygame.error as e:
-        print(f"Pygame error: {e}")
-    finally:
-        env.close()
+        except pygame.error as e:
+            print(f"Pygame error: {e}")
+            env.close()
+            env = gym.make("CarRacing-v2", render_mode="rgb_array")
+            observation, _ = env.reset()
 
-def generate_data(rollouts, data_dir, model, threads=4):
+def generate_data(num_rollouts, data_dir, model, num_threads, device):
     assert exists(data_dir), "The data directory does not exist..."
-    seq_len = 1000
-
-    envs = [gym.make("CarRacing-v2") for _ in range(threads)]
-    with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [executor.submit(generate_single_rollout, envs[i % threads], model, seq_len, i, data_dir)
-                   for i in range(rollouts)]
-        for future in futures:
+    model.set_device(device)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(generate_single_rollout, i, data_dir, model, device) for i in range(num_rollouts)]
+        for future in concurrent.futures.as_completed(futures):
             future.result()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--rollouts', type=int, help="Number of rollouts")
-    parser.add_argument('--dir', type=str, required=True, help="Where to place rollouts")
-    parser.add_argument('--threads', type=int, default=4, help="Number of threads for rollout generation")
+    parser.add_argument('--dir', type=str, help="Where to place rollouts")
+    parser.add_argument('--threads', type=int, default=4, help="Number of threads to use")
+    parser.add_argument('--use-gpu', action='store_true', help="Use GPU if available")
     args = parser.parse_args()
 
-    pretrained_model_path = 'pre_trained/original.npz'  # Use the new .npz file
-    model = load_pretrained_agent(pretrained_model_path).cuda()  # Move model to GPU
+    device = torch.device("cuda" if args.use_gpu and torch.cuda.is_available() else "cpu")
 
+    pretrained_model_path = 'pre_trained/original.npz'
+    model = load_pretrained_agent(pretrained_model_path)
+    
     print(f"Generating {args.rollouts} rollouts in directory {args.dir} with {args.threads} threads...")
-    generate_data(args.rollouts, args.dir, model, args.threads)
+    generate_data(args.rollouts, args.dir, model, args.threads, device)
     print("Rollout generation completed.")

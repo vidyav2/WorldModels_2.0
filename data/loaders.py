@@ -6,15 +6,16 @@ from tqdm import tqdm
 import torch
 import torch.utils.data
 import numpy as np
+from torch.utils.data import Dataset
+
 
 class _RolloutDataset(torch.utils.data.Dataset): # pylint: disable=too-few-public-methods
     def __init__(self, root, transform, buffer_size=200, train=True): # pylint: disable=too-many-arguments
         self._transform = transform
 
         self._files = [
-            join(root, sd, ssd)
-            for sd in listdir(root) if isdir(join(root, sd))
-            for ssd in listdir(join(root, sd))]
+            join(root, f) for f in listdir(root) if f.endswith('.npz')
+        ]
 
         if train:
             self._files = self._files[:-600]
@@ -91,7 +92,7 @@ class RolloutSequenceDataset(_RolloutDataset): # pylint: disable=too-few-public-
     - terminal: (seq_len,) boolean
     - next_obs: (seq_len, *obs_shape)
 
-    NOTE: seq_len < rollout_len in moste use cases
+    NOTE: seq_len < rollout_len in most use cases
 
     :args root: root directory of data sequences
     :args seq_len: number of timesteps extracted from each rollout
@@ -118,30 +119,44 @@ class RolloutSequenceDataset(_RolloutDataset): # pylint: disable=too-few-public-
     def _data_per_sequence(self, data_length):
         return data_length - self._seq_len
 
-class RolloutObservationDataset(_RolloutDataset): # pylint: disable=too-few-public-methods
-    """ Encapsulates rollouts.
+class RolloutObservationDataset(Dataset):
+    def __init__(self, root, transform=None, train=True, buffer_size=200):
+        self.root = root
+        self.transform = transform
+        self.train = train
+        self.buffer_size = buffer_size
 
-    Rollouts should be stored in subdirs of the root directory, in the form of npz files,
-    each containing a dictionary with the keys:
-        - observations: (rollout_len, *obs_shape)
-        - actions: (rollout_len, action_size)
-        - rewards: (rollout_len,)
-        - terminals: (rollout_len,), boolean
+        self.files = [join(root, f) for f in listdir(root) if f.endswith('.npz')]
+        if train:
+            self.files = self.files[:-600]  # Assuming last 600 files for test set
+        else:
+            self.files = self.files[-600:]
 
-     As the dataset is too big to be entirely stored in rams, only chunks of it
-     are stored, consisting of a constant number of files (determined by the
-     buffer_size parameter).  Once built, buffers must be loaded with the
-     load_next_buffer method.
+        self.observations = []
+        self.current_file_idx = 0
+        self.load_next_buffer()
 
-    Data are then provided in the form of images
+    def load_next_buffer(self):
+        """ Load the next buffer of observations """
+        buffer_files = self.files[self.current_file_idx:self.current_file_idx + self.buffer_size]
+        self.current_file_idx = (self.current_file_idx + self.buffer_size) % len(self.files)
 
-    :args root: root directory of data sequences
-    :args seq_len: number of timesteps extracted from each rollout
-    :args transform: transformation of the observations
-    :args train: if True, train data, else test
-    """
-    def _data_per_sequence(self, data_length):
-        return data_length
+        self.observations = []
+        for f in buffer_files:
+            try:
+                with np.load(f) as data:
+                    self.observations.extend(data['observations'])
+            except EOFError:
+                print(f"Error reading file {f}, skipping.")
 
-    def _get_data(self, data, seq_index):
-        return self._transform(data['observations'][seq_index])
+        if not self.observations:
+            raise ValueError("No valid data found in the provided files.")
+
+    def __len__(self):
+        return len(self.observations)
+
+    def __getitem__(self, idx):
+        sample = self.observations[idx]
+        if self.transform:
+            sample = self.transform(sample)
+        return sample

@@ -8,6 +8,7 @@ import numpy as np
 from models import MDRNNCell, VAE, Controller
 import gym
 import gym.envs.box2d
+from os import makedirs
 
 # A bit dirty: manually change size of car racing env
 gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 96, 96
@@ -43,10 +44,14 @@ def sample_continuous_policy(action_space, seq_len, dt):
                     action_space.low, action_space.high))
     return actions
 
-def save_checkpoint(state, is_best, filename, best_filename):
-    """ Save state in filename. Also save in best_filename if is_best. """
-    torch.save(state, filename)
-    if is_best:
+def save_checkpoint(state, cur_best, test_loss, vae_dir):
+    """Saves model and training parameters at checkpoint + the best model so far."""
+    checkpoint_filename = join(vae_dir, 'checkpoint.tar')
+    torch.save(state, checkpoint_filename)
+    
+    # Save the best model separately with a specific name
+    if cur_best is None or test_loss < cur_best:
+        best_filename = join(vae_dir, 'best.tar')
         torch.save(state, best_filename)
 
 def flatten_parameters(params):
