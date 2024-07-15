@@ -28,7 +28,7 @@ SEQ_LEN = 32
 epochs = 100
 
 # Loading VAE
-vae_file = join(args.logdir, 'vaeNew', 'best.tar')
+vae_file = join(args.logdir, 'vae', 'best.tar')
 assert exists(vae_file), "No trained VAE in the logdir..."
 state = torch.load(vae_file)
 print(f"Loading VAE at epoch {state['epoch']} with test error {state['precision']}")

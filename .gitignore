@@ -7,5 +7,5 @@ frames/
 dock_config.json
 .mypy_cache
 datasets/
-exp_dir/vaeNew/
+exp_dir/
 pre_trained/rollouts/

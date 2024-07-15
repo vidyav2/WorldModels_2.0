@@ -4,8 +4,8 @@ Generating data from the CarRacing gym environment.
 """
 import argparse
 from os.path import join, exists
-import gymnasium as gym
-import numpy as np
+import gymnasium as gym 
+import numpy as np 
 from utils.misc import sample_continuous_policy
 
 def generate_data(rollouts, data_dir, noise_type): # pylint: disable=R0914
